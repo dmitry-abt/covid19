@@ -1,0 +1,253 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+<link rel="stylesheet" href="~/app/leaflet/leaflet.css" />
+<style>
+    #map {
+        height: calc(100vh - 0px) !important;
+    }
+    .leaflet-container {
+        width:  100%;
+        height: 100vh;
+    }
+    
+    .legend, .temporal-legend {
+        padding: 6px 10px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: rgba(0,0,0,0.85);
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        border-radius: 5px;
+        color:whitesmoke;
+    }
+    
+    #legendTitle {
+        text-align: center;
+        margin-bottom: 15px;
+        color: whitesmoke;
+        font-weight: bold;
+    }
+    
+    .symbolsContainer {
+        float: left;
+        margin-left: 50px;
+    }
+    
+    .legendCircle {
+        border-radius:50%;
+        border: 1px solid #537898;
+        background: rgba(0,128,128,0.5);
+        display: inline-block;
+    }
+    
+    .legendValue {
+        position: absolute;
+        right: 12px;
+        color:whitesmoke;
+        font-size:10pt;
+        text-align:center;
+        font-weight: bold;
+    }
+    
+    .info {
+        width:30vw;
+        padding: 6px 10px;
+        font: 14px/16px Arial, Helvetica, sans-serif;
+        background: rgba(0,0,0,0.85);
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        border-radius: 5px;
+        color:whitesmoke;
+    }
+    
+    .info h5 {
+        margin: 0 0 5px;
+        color: #777;
+        text-align: center;
+        color: whitesmoke;
+        font-weight: bold;
+    }
+    
+    .info #horBarChart {
+        width: 100% !important;
+        max-width: 800px;
+    }
+    
+    .leaflet-control-layers {
+        float:left;
+        padding: 6px 6px;
+        margin-top: 50px;
+        position:'topleft';
+        background: rgba(0,0,0,0.85);
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        border-radius: 5px;
+        color:whitesmoke;
+    }
+   
+    .legend {
+        line-height: 20px;
+        color: white;
+    }
+    .legend i {
+        width: 18px;
+        height: 18px;
+        float: left;
+        margin-right: 8px;
+        opacity: 0.7;        
+    }
+</style>
+
+<script src="~/app/jquery/dist/jquery.min.js"></script>
+<script src="~/app/leaflet/leaflet.js"></script>
+<script src="~/app/extscripts/js/Chart.js"></script>
+
+<div id="map"></div>
+
+<script>
+    var dataUrl = "https://localhost:7006/countries/all";
+
+    var osm_humanitarian = L.tileLayer('http://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+    var osm_map = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    });
+    var esri_dark_gray_base = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '&copy; <a href="http://services.arcgisonline.com/arcgis/rest/services">ESRI</a> arcgisonline'
+    });
+    var world_street_map = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'
+    });
+    var world_imagery = L.tileLayer('http://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+
+    var map = L.map('map', {
+        layers: [osm_humanitarian] 
+    }).setView([51.5, 0], 5);
+
+    var baseLayers = {
+        "Open Street Map": osm_map,
+        "OSM Humanitarian": osm_humanitarian,
+        "Dark Gray Base": esri_dark_gray_base,
+        "World Street Map": world_street_map,
+        "World Imagery": world_imagery
+    }
+
+    var layersControl = L.control.layers(baseLayers, null, {position: 'topleft'}).addTo(map);
+
+    function getColor(d) {
+        var pallete = ['#ffffff','#fff7ec','#fee8c8','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f'];
+        return d > 1000000 ? pallete[7] :
+            d > 500000 ? pallete[6] :
+            d > 100000 ? pallete[5] :
+            d > 50000 ? pallete[4] :
+            d > 10000 ? pallete[3] :
+            d > 5000 ? pallete[2] :
+            d > 1000 ? pallete[1] :
+                        pallete[0];
+    }
+
+    $.getJSON(dataUrl, function(data) {
+        $.each(data, function(i, item) {
+            var coords = JSON.parse(item.coordinates);
+            var type = item.type == 'Polygon' ? 1 : 2;
+            var conv_coords = L.GeoJSON.coordsToLatLngs(coords, type, 0);
+            var poly = L.polygon(conv_coords, {
+                fillColor: getColor(item.deaths),
+                color: 'white',
+                fillOpacity: 0.8
+            });
+            poly.bindPopup(
+                "<h4><b>Country: </b> " + item.name.toString() + "</h4>" + 
+                "<h5><b>Confirmed: </b> " + item.confirmed.toString() + "</h5>" + 
+                "<h5><b>Recovered: " + item.recovered.toString() + "</h5>" +
+                "<h5><b>Deaths: " + item.deaths.toString() + "</h5>" 
+            );
+            poly.on('mouseover', function(e) {
+                this.openPopup();
+            });
+            poly.on('mouseout', function(e) {
+                this.closePopup();
+            });
+            poly.addTo(map);
+        });
+    });
+
+    barChartLegend();
+    function barChartLegend() {
+        var info = L.control({postition: 'topright'});
+        info.onAdd = function(map) {
+            var div = L.DomUtil.create('div', 'info');
+            div.innerHTML += '<h5>Worse 10 Countries</h5>';
+            div.innerHTML += '<canvas id="horBarChart"></canvas>';
+            return div;
+        };
+        info.addTo(map);        
+    }
+
+    displayhorBarChart();
+    function displayhorBarChart() {
+        var x_labels = [];
+        var y_data = [];
+
+        $.ajax({
+            url: "/countries/worse",
+            cache:"false",
+            dataType: "text",
+            type: "GET",
+
+            success: function(data) {
+                var obj = JSON.parse(data);
+                obj.forEach(o => {
+                    x_labels.push(o.name);
+                });
+
+                var label_array = Object.values(x_labels);
+                var bar_colors = [];
+                obj.forEach(o => {
+                    y_data.push(o.deaths);
+                    bar_colors.push(getColor(o.deaths));
+                });
+
+                var data_array = Object.values(y_data);
+                var ctx = document.getElementById("horBarChart").getContext("2d");
+                var canvas = document.getElementById("horBarChart");
+                var parent = document.getElementById("info");
+                var horBarChart = new Chart(ctx, {
+                    type: 'horizontalBar',
+                    data: {
+                        labels: label_array,
+                        datasets: [{
+                            label: 'Deaths',
+                            backgroundColor: bar_colors,
+                            borderColor: "rgba(0,90,50, 1)",
+                            data: data_array
+                        }]
+                    },
+
+                    options: {
+                        scaleShowValues: true,
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }],
+                            xAxes: [{
+                                ticks: {
+                                    autoSkip: false,
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
+                    }
+                });
+            },
+
+            error: function(data) {
+                alert('error; '+ eval(error));
+            }
+        });
+    }
+
+</script>
